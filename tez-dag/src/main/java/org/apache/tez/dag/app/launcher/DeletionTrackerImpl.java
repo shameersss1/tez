@@ -21,6 +21,7 @@ package org.apache.tez.dag.app.launcher;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.RejectedExecutionException;
@@ -34,6 +35,7 @@ import org.apache.tez.common.security.JobTokenSecretManager;
 import org.apache.tez.dag.records.TezDAGID;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.tez.dag.api.TezConfiguration;
+import org.apache.tez.dag.records.TezVertexID;
 import org.apache.tez.runtime.library.common.TezRuntimeUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -91,5 +93,27 @@ public class DeletionTrackerImpl extends DeletionTracker {
       dagCleanupService = null;
     }
     nodeIdShufflePortMap = null;
+  }
+
+  @Override
+  public void vertexComplete(TezVertexID vertex, JobTokenSecretManager jobTokenSecretManager, Set<NodeId> nodeIdList) {
+    super.vertexComplete(vertex, jobTokenSecretManager, nodeIdList);
+    String vertexId = String.format("%02d", vertex.getId());
+    LOG.info("Vertex shuffle data deletion for vertexId= " + vertexId);
+    for (NodeId nodeId : nodeIdList) {
+      Integer shufflePort = null;
+      if (nodeIdShufflePortMap != null) {
+        shufflePort = nodeIdShufflePortMap.get(nodeId);
+      }
+      if (shufflePort != null) {
+        VertexDeleteRunnable vertexDeleteRunnable = new VertexDeleteRunnable(vertex, jobTokenSecretManager, nodeId,
+            shufflePort, vertexId, TezRuntimeUtils.getHttpConnectionParams(conf));
+        try {
+          dagCleanupService.submit(vertexDeleteRunnable);
+        } catch (RejectedExecutionException rejectedException) {
+          LOG.info("Ignoring deletion request for " + vertexDeleteRunnable);
+        }
+      }
+    }
   }
 }

@@ -16,6 +16,7 @@ package org.apache.tez.dag.app.launcher;
 
 import java.net.UnknownHostException;
 import java.util.List;
+import java.util.Set;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.tez.common.Preconditions;
@@ -35,6 +36,8 @@ import org.apache.tez.dag.app.ServicePluginLifecycleAbstractService;
 import org.apache.tez.dag.app.dag.event.DAGAppMasterEventType;
 import org.apache.tez.dag.app.dag.event.DAGAppMasterEventUserServiceFatalError;
 import org.apache.tez.dag.records.TezDAGID;
+import org.apache.hadoop.yarn.api.records.NodeId;
+import org.apache.tez.dag.records.TezVertexID;
 import org.apache.tez.serviceplugins.api.ContainerLaunchRequest;
 import org.apache.tez.serviceplugins.api.ContainerLauncher;
 import org.apache.tez.serviceplugins.api.ContainerLauncherContext;
@@ -200,6 +203,11 @@ public class ContainerLauncherManager extends AbstractService
     }
   }
 
+  public void vertexComplete(TezVertexID vertex, JobTokenSecretManager secretManager, Set<NodeId> nodeIdList) {
+    for (int i = 0 ; i < containerLaunchers.length ; i++) {
+      containerLaunchers[i].vertexComplete(vertex, secretManager, nodeIdList);
+    }
+  }
   public void dagSubmitted() {
     // Nothing to do right now. Indicates that a new DAG has been submitted and
     // the context has updated information.

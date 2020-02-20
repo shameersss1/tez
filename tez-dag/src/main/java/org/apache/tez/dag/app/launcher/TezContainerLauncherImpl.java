@@ -22,7 +22,9 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -34,6 +36,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.io.DataInputByteBuffer;
+import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.tez.common.DagContainerLauncher;
 import org.apache.tez.common.ReflectionUtils;
 import org.apache.tez.common.TezUtils;
@@ -41,6 +44,7 @@ import org.apache.tez.common.security.JobTokenSecretManager;
 import org.apache.tez.dag.api.TezConstants;
 import org.apache.tez.dag.api.TezException;
 import org.apache.tez.dag.records.TezDAGID;
+import org.apache.tez.dag.records.TezVertexID;
 import org.apache.tez.runtime.library.common.TezRuntimeUtils;
 import org.apache.tez.runtime.library.common.shuffle.ShuffleUtils;
 import org.apache.tez.serviceplugins.api.ContainerLaunchRequest;
@@ -445,6 +449,12 @@ public class TezContainerLauncherImpl extends DagContainerLauncher {
   public void dagComplete(TezDAGID dag, JobTokenSecretManager jobTokenSecretManager) {
     if (deletionTracker != null) {
       deletionTracker.dagComplete(dag, jobTokenSecretManager);
+    }
+  }
+
+  public void vertexComplete(TezVertexID vertex, JobTokenSecretManager jobTokenSecretManager, Set<NodeId> nodeIdList) {
+    if (deletionTracker != null) {
+      deletionTracker.vertexComplete(vertex, jobTokenSecretManager, nodeIdList);
     }
   }
 

@@ -18,6 +18,7 @@
 
 package org.apache.tez.auxservices;
 
+import org.apache.hadoop.fs.RemoteIterator;
 import org.apache.hadoop.util.DiskChecker;
 import static org.fusesource.leveldbjni.JniDBFactory.asString;
 import static org.fusesource.leveldbjni.JniDBFactory.bytes;
@@ -57,6 +58,7 @@ import javax.crypto.SecretKey;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileContext;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.LocalDirAllocator;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DataInputByteBuffer;
@@ -1001,6 +1003,7 @@ public class ShuffleHandler extends AuxiliaryService {
         new QueryStringDecoder(request.getUri()).getParameters();
       final List<String> keepAliveList = q.get("keepAlive");
       final List<String> dagCompletedQ = q.get("dagAction");
+      final List<String> vertexCompletedQ = q.get("vertexAction");
       boolean keepAliveParam = false;
       if (keepAliveList != null && keepAliveList.size() == 1) {
         keepAliveParam = Boolean.parseBoolean(keepAliveList.get(0));
@@ -1013,6 +1016,7 @@ public class ShuffleHandler extends AuxiliaryService {
       final Range reduceRange = splitReduces(q.get("reduce"));
       final List<String> jobQ = q.get("job");
       final List<String> dagIdQ = q.get("dag");
+      final List<String> vertexIdQ = q.get("vertex");
       if (LOG.isDebugEnabled()) {
         LOG.debug("RECV: " + request.getUri() +
             "\n  mapId: " + mapIds +
@@ -1023,6 +1027,9 @@ public class ShuffleHandler extends AuxiliaryService {
       }
       // If the request is for Dag Deletion, process the request and send OK.
       if (deleteDagDirectories(evt, dagCompletedQ, jobQ, dagIdQ))  {
+        return;
+      }
+      if (deleteVertexDirectories(evt, vertexCompletedQ, jobQ, dagIdQ, vertexIdQ)) {
         return;
       }
       if (mapIds == null || reduceRange == null || jobQ == null || dagIdQ == null) {
@@ -1124,6 +1131,22 @@ public class ShuffleHandler extends AuxiliaryService {
       return false;
     }
 
+    private boolean deleteVertexDirectories(MessageEvent evt, List<String> vertexCompletedQ,
+        List<String> jobQ, List<String> dagIdQ, List<String> vertexIdQ)
+        throws IOException {
+      if (jobQ == null || jobQ.isEmpty()) {
+        return false;
+      }
+      if (vertexCompletedQ != null && !vertexCompletedQ.isEmpty() && vertexCompletedQ.get(0).contains("delete")
+          && vertexIdQ != null && !vertexIdQ.isEmpty()) {
+        getVertexDirectories(jobQ.get(0), dagIdQ.get(0), vertexIdQ.get(0), userRsrc.get(jobQ.get(0)));
+        evt.getChannel().write(new DefaultHttpResponse(HTTP_1_1, OK));
+        evt.getChannel().close();
+        return true;
+      }
+      return false;
+    }
+
     /**
      * Calls sendMapOutput for the mapId pointed by ReduceContext.mapsToSend
      * and increments it. This method is first called by messageReceived()
@@ -1187,6 +1210,26 @@ public class ShuffleHandler extends AuxiliaryService {
     private String getBaseLocation(String jobId, String dagId, String user) {
       final String baseStr =
           getDagLocation(jobId, dagId, user) + "output" + Path.SEPARATOR;
+      return baseStr;
+    }
+
+    private String getVertexDirectories(String jobId, String dagId, String vertexId, String user)
+        throws IOException {
+      String baseStr = getBaseLocation(jobId, dagId, user);
+      FileContext lfc = FileContext.getLocalFSFileContext();
+      for(Path dagPath : lDirAlloc.getAllLocalPathsToRead(baseStr, conf)) {
+        RemoteIterator<FileStatus> status = lfc.listStatus(dagPath);
+        final JobID jobID = JobID.forName(jobId);
+        String dirName = "attempt" + jobID.toString().replace("job","") + "_" + dagId + "_" + vertexId + "_";
+        while (status.hasNext()) {
+          FileStatus fileStatus = status.next();
+          Path attemptPath = fileStatus.getPath();
+          if (attemptPath.getName().startsWith(dirName)) {
+            boolean retDelete = lfc.delete(attemptPath, true);
+            LOG.info("Deleting directory : " + attemptPath + " returned " + retDelete);
+          }
+        }
+      }
       return baseStr;
     }
 

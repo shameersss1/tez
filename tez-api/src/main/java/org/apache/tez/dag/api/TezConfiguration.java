@@ -785,6 +785,25 @@ public class TezConfiguration extends Configuration {
   public static final boolean TEZ_AM_DAG_CLEANUP_ON_COMPLETION_DEFAULT = false;
 
   /**
+   * Boolean value. Instructs AM to delete vertex shuffle data if a vertex and all its
+   * child vertices at a certain depth are completed.
+   */
+  @ConfigurationScope(Scope.AM)
+  @ConfigurationProperty(type="boolean")
+  public static final String TEZ_AM_VERTEX_CLEANUP_ON_COMPLETION = TEZ_AM_PREFIX
+      + "vertex.cleanup.on.completion";
+  public static final boolean TEZ_AM_VERTEX_CLEANUP_ON_COMPLETION_DEFAULT = false;
+
+  /**
+   * Int value. The height from the vertex that it can issue shuffle data deletion upon completion
+   */
+  @ConfigurationScope(Scope.AM)
+  @ConfigurationProperty(type="integer")
+  public static final String TEZ_AM_VERTEX_CLEANUP_HEIGHT = TEZ_AM_PREFIX
+      + "vertex.cleanup.height";
+  public static final int TEZ_AM_VERTEX_CLEANUP_HEIGHT_DEFAULT = 1;
+
+  /**
    * Int value. Upper limit on the number of threads used to delete DAG directories on nodes.
    */
   @ConfigurationScope(Scope.AM)

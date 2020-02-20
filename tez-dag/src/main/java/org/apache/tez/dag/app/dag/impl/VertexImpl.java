@@ -114,6 +114,8 @@ import org.apache.tez.dag.app.dag.DAG;
 import org.apache.tez.dag.app.dag.RootInputInitializerManager;
 import org.apache.tez.dag.app.dag.StateChangeNotifier;
 import org.apache.tez.dag.app.dag.Task;
+import org.apache.tez.dag.app.dag.TaskAttempt;
+import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.tez.dag.app.dag.TaskAttemptStateInternal;
 import org.apache.tez.dag.app.dag.TaskTerminationCause;
 import org.apache.tez.dag.app.dag.Vertex;
@@ -130,6 +132,7 @@ import org.apache.tez.dag.app.dag.event.TaskEvent;
 import org.apache.tez.dag.app.dag.event.TaskEventScheduleTask;
 import org.apache.tez.dag.app.dag.event.TaskEventTermination;
 import org.apache.tez.dag.app.dag.event.TaskEventType;
+import org.apache.tez.dag.app.dag.event.VertexDeletionEvent;
 import org.apache.tez.dag.app.dag.event.VertexEvent;
 import org.apache.tez.dag.app.dag.event.VertexEventCommitCompleted;
 import org.apache.tez.dag.app.dag.event.VertexEventInputDataInformation;
@@ -187,6 +190,7 @@ import org.apache.tez.runtime.api.impl.OutputSpec;
 import org.apache.tez.runtime.api.impl.TaskSpec;
 import org.apache.tez.runtime.api.impl.TaskStatistics;
 import org.apache.tez.runtime.api.impl.TezEvent;
+import org.apache.tez.runtime.library.common.shuffle.ShuffleUtils;
 import org.apache.tez.state.OnStateChangedCallback;
 import org.apache.tez.state.StateMachineTez;
 import org.slf4j.Logger;
@@ -547,7 +551,8 @@ public class VertexImpl implements org.apache.tez.dag.app.dag.Vertex, EventHandl
                   VertexEventType.V_ROUTE_EVENT,
                   VertexEventType.V_SOURCE_TASK_ATTEMPT_COMPLETED,
                   VertexEventType.V_TASK_ATTEMPT_COMPLETED,
-                  VertexEventType.V_TASK_RESCHEDULED))
+                  VertexEventType.V_TASK_RESCHEDULED,
+                  VertexEventType.V_DELETE_SHUFFLE_DATA))
 
           // Transitions from SUCCEEDED state
           .addTransition(
@@ -583,6 +588,9 @@ public class VertexImpl implements org.apache.tez.dag.app.dag.Vertex, EventHandl
           .addTransition(VertexState.SUCCEEDED, VertexState.SUCCEEDED,
               VertexEventType.V_TASK_ATTEMPT_COMPLETED,
               new TaskAttemptCompletedEventTransition())
+          .addTransition(VertexState.SUCCEEDED, VertexState.SUCCEEDED,
+              VertexEventType.V_DELETE_SHUFFLE_DATA,
+              new VertexDeleteTransition())
 
 
           // Transitions from FAILED state
@@ -604,7 +612,8 @@ public class VertexImpl implements org.apache.tez.dag.app.dag.Vertex, EventHandl
                   VertexEventType.V_ROOT_INPUT_INITIALIZED,
                   VertexEventType.V_SOURCE_TASK_ATTEMPT_COMPLETED,
                   VertexEventType.V_NULL_EDGE_INITIALIZED,
-                  VertexEventType.V_INPUT_DATA_INFORMATION))
+                  VertexEventType.V_INPUT_DATA_INFORMATION,
+                  VertexEventType.V_DELETE_SHUFFLE_DATA))
 
           // Transitions from KILLED state
           .addTransition(
@@ -626,7 +635,8 @@ public class VertexImpl implements org.apache.tez.dag.app.dag.Vertex, EventHandl
                   VertexEventType.V_TASK_COMPLETED,
                   VertexEventType.V_ROOT_INPUT_INITIALIZED,
                   VertexEventType.V_NULL_EDGE_INITIALIZED,
-                  VertexEventType.V_INPUT_DATA_INFORMATION))
+                  VertexEventType.V_INPUT_DATA_INFORMATION,
+                  VertexEventType.V_DELETE_SHUFFLE_DATA))
 
           // No transitions from INTERNAL_ERROR state. Ignore all.
           .addTransition(
@@ -646,7 +656,8 @@ public class VertexImpl implements org.apache.tez.dag.app.dag.Vertex, EventHandl
                   VertexEventType.V_INTERNAL_ERROR,
                   VertexEventType.V_ROOT_INPUT_INITIALIZED,
                   VertexEventType.V_NULL_EDGE_INITIALIZED,
-                  VertexEventType.V_INPUT_DATA_INFORMATION))
+                  VertexEventType.V_INPUT_DATA_INFORMATION,
+                  VertexEventType.V_DELETE_SHUFFLE_DATA))
           // create the topology tables
           .installTopology();
 
@@ -720,6 +731,10 @@ public class VertexImpl implements org.apache.tez.dag.app.dag.Vertex, EventHandl
   @VisibleForTesting
   Map<Vertex, Edge> sourceVertices;
   private Map<Vertex, Edge> targetVertices;
+  private List<Vertex> ancestors;
+  private int incompleteChildrenVertices = 0;
+  private Set<NodeId> nodes = Sets.newHashSet();
+  private boolean isVertexDeleteEnabled = false;
   Set<Edge> uninitializedEdges = Sets.newHashSet();
   // using a linked hash map to conveniently map edge names to a contiguous index
   LinkedHashMap<String, Integer> ioIndices = Maps.newLinkedHashMap();
@@ -1151,7 +1166,9 @@ public class VertexImpl implements org.apache.tez.dag.app.dag.Vertex, EventHandl
         .append(", ContainerLauncher=").append(containerLauncherIdentifier).append(":").append(containerLauncherName)
         .append(", TaskCommunicator=").append(taskCommunicatorIdentifier).append(":").append(taskCommName);
     LOG.info(sb.toString());
-
+    isVertexDeleteEnabled = vertexConf.getBoolean(TezConfiguration.TEZ_AM_VERTEX_CLEANUP_ON_COMPLETION,
+        TezConfiguration.TEZ_AM_VERTEX_CLEANUP_ON_COMPLETION_DEFAULT) &&
+        ShuffleUtils.isTezShuffleHandler(vertexConf);
     stateMachine = new StateMachineTez<VertexState, VertexEventType, VertexEvent, VertexImpl>(
         stateMachineFactory.make(this), this);
     augmentStateMachine();
@@ -2305,6 +2322,11 @@ public class VertexImpl implements org.apache.tez.dag.app.dag.Vertex, EventHandl
       if((vertexSucceeded || vertexFailuresBelowThreshold) && vertex.terminationCause == null) {
         if(vertexSucceeded) {
           LOG.info("All tasks have succeeded, vertex:" + vertex.logIdentifier);
+          if (vertex.isVertexDeleteEnabled) {
+            for (Vertex v : vertex.ancestors) {
+              vertex.eventHandler.handle(new VertexDeletionEvent(vertex, v));
+            }
+          }
         } else {
           LOG.info("All tasks in the vertex " + vertex.logIdentifier + " have completed and the percentage of failed tasks (failed/total) (" + vertex.failedTaskCount + "/" + vertex.numTasks + ") is less that the threshold of " + vertex.maxFailuresPercent);
           vertex.addDiagnostic("Vertex succeeded as percentage of failed tasks (failed/total) (" + vertex.failedTaskCount + "/" + vertex.numTasks + ") is less that the threshold of " + vertex.maxFailuresPercent);
@@ -3711,12 +3733,14 @@ public class VertexImpl implements org.apache.tez.dag.app.dag.Vertex, EventHandl
     }
 
     private void taskSucceeded(VertexImpl vertex, Task task) {
+      updateNodeList(vertex, task);
       vertex.succeededTaskCount++;
       // TODO Metrics
       // job.metrics.completedTask(task);
     }
 
     private void taskFailed(VertexImpl vertex, Task task) {
+      updateNodeList(vertex, task);
       vertex.failedTaskCount++;
       vertex.addDiagnostic("Task failed"
         + ", taskId=" + task.getTaskId()
@@ -3726,9 +3750,21 @@ public class VertexImpl implements org.apache.tez.dag.app.dag.Vertex, EventHandl
     }
 
     private void taskKilled(VertexImpl vertex, Task task) {
+      updateNodeList(vertex, task);
       vertex.killedTaskCount++;
       // TODO Metrics
       //job.metrics.killedTask(task);
+    }
+  }
+
+  private static void updateNodeList(VertexImpl vertex, Task task) {
+    if (vertex.isVertexDeleteEnabled) {
+      for (TaskAttempt ta : task.getAttempts().values()) {
+        NodeId nodeId = ta.getAssignedContainer().getNodeId();
+        if (nodeId != null) {
+          vertex.nodes.add(nodeId);
+        }
+      }
     }
   }
 
@@ -3749,6 +3785,22 @@ public class VertexImpl implements org.apache.tez.dag.app.dag.Vertex, EventHandl
     @Override
     public VertexState transition(VertexImpl vertex, VertexEvent event) {
       return VertexImpl.checkTasksForCompletion(vertex);
+    }
+  }
+
+  private static class VertexDeleteTransition implements
+      SingleArcTransition<VertexImpl, VertexEvent> {
+
+    @Override
+    public void transition(VertexImpl vertex, VertexEvent event) {
+      vertex.incompleteChildrenVertices--;
+      // check if all the child vertices are completed
+      if (vertex.incompleteChildrenVertices == 0) {
+        LOG.info("Vertex shuffle data deletion for vertex name: " +
+            vertex.getName() + " with vertex id: " + vertex.getVertexId());
+        vertex.appContext.getAppMaster().vertexComplete(
+            vertex.vertexId, vertex.nodes);
+      }
     }
   }
 
@@ -4342,6 +4394,14 @@ public class VertexImpl implements org.apache.tez.dag.app.dag.Vertex, EventHandl
     } finally {
       writeLock.unlock();;
     }
+  }
+
+  public void setAncestors(List<Vertex> ancestors) {
+    this.ancestors = ancestors;
+  }
+
+  public void setChildren(List<Vertex> children) {
+    this.incompleteChildrenVertices = children.size();
   }
 
   @Override

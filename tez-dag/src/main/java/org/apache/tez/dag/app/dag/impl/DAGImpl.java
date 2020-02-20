@@ -48,6 +48,7 @@ import org.apache.tez.common.TezUtilsInternal;
 import org.apache.tez.common.counters.LimitExceededException;
 import org.apache.tez.dag.app.dag.event.DAGEventTerminateDag;
 import org.apache.tez.dag.app.dag.event.DiagnosableEvent;
+import org.apache.tez.runtime.library.common.shuffle.ShuffleUtils;
 import org.apache.tez.state.OnStateChangedCallback;
 import org.apache.tez.state.StateMachineTez;
 import org.slf4j.Logger;
@@ -1720,7 +1721,8 @@ public class DAGImpl implements org.apache.tez.dag.app.dag.DAG,
 
     Map<Vertex, Edge> outVertices =
         new HashMap<Vertex, Edge>();
-
+    List<Vertex> ancestors = new ArrayList<>();
+    List<Vertex> children = new ArrayList<>();
     for(String inEdgeId : vertexPlan.getInEdgeIdList()){
       EdgePlan edgePlan = edgePlans.get(inEdgeId);
       Vertex inVertex = dag.vertexMap.get(edgePlan.getInputVertexName());
@@ -1741,6 +1743,48 @@ public class DAGImpl implements org.apache.tez.dag.app.dag.DAG,
 
     vertex.setInputVertices(inVertices);
     vertex.setOutputVertices(outVertices);
+    boolean isVertexDeleteEnabled = dag.dagConf.getBoolean(TezConfiguration.TEZ_AM_VERTEX_CLEANUP_ON_COMPLETION,
+        TezConfiguration.TEZ_AM_VERTEX_CLEANUP_ON_COMPLETION_DEFAULT) && ShuffleUtils.isTezShuffleHandler(dag.dagConf);
+    if (isVertexDeleteEnabled) {
+      int deletionHeight = dag.dagConf.getInt(TezConfiguration.TEZ_AM_VERTEX_CLEANUP_HEIGHT,
+          TezConfiguration.TEZ_AM_VERTEX_CLEANUP_HEIGHT_DEFAULT);
+      getSpannedVerticesAncestors(dag, edgePlans, vertex, vertexPlan, ancestors, deletionHeight);
+      getSpannedVerticesChildren(dag, edgePlans, vertex, vertexPlan, children, deletionHeight);
+      ((VertexImpl) vertex).setAncestors(ancestors);
+      ((VertexImpl) vertex).setChildren(children);
+    }
+  }
+
+  /**
+   * get all the ancestor vertices at a particular depth
+   */
+  private static void getSpannedVerticesAncestors(DAGImpl dag, Map<String, EdgePlan> edgePlans,
+      Vertex vertex, VertexPlan vertexPlan, List<Vertex> ancestorVertices, int depth) {
+    if (depth == 0) {
+      ancestorVertices.add(vertex);
+      return;
+    }
+    for(String inEdgeId : vertexPlan.getInEdgeIdList()) {
+      EdgePlan edgePlan = edgePlans.get(inEdgeId);
+      Vertex inVertex = dag.vertexMap.get(edgePlan.getInputVertexName());
+      getSpannedVerticesAncestors(dag, edgePlans, inVertex, inVertex.getVertexPlan(), ancestorVertices, depth - 1);
+    }
+  }
+
+  /**
+   * get all the child vertices at a particular depth
+   */
+  private static void getSpannedVerticesChildren(DAGImpl dag, Map<String, EdgePlan>
+      edgePlans, Vertex vertex, VertexPlan vertexPlan, List<Vertex> childVertices, int depth) {
+    if (depth == 0) {
+      childVertices.add(vertex);
+      return;
+    }
+    for(String outEdgeId : vertexPlan.getOutEdgeIdList()){
+      EdgePlan edgePlan = edgePlans.get(outEdgeId);
+      Vertex outVertex = dag.vertexMap.get(edgePlan.getOutputVertexName());
+      getSpannedVerticesChildren(dag, edgePlans, outVertex, outVertex.getVertexPlan(), childVertices, depth - 1);
+    }
   }
 
   /**

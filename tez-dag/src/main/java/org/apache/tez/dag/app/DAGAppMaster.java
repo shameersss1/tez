@@ -65,6 +65,7 @@ import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.GnuParser;
 import org.apache.commons.cli.Options;
 import org.apache.commons.lang.exception.ExceptionUtils;
+import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.tez.Utils;
 import org.apache.tez.client.CallerContext;
 import org.apache.tez.client.TezClientUtils;
@@ -2767,4 +2768,7 @@ public class DAGAppMaster extends AbstractService {
     return sb.toString();
   }
 
+  public void vertexComplete(TezVertexID completedVertexID, Set<NodeId> nodesList) {
+    getContainerLauncherManager().vertexComplete(completedVertexID, jobTokenSecretManager, nodesList);
+  }
 }

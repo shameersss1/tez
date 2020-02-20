@@ -23,7 +23,9 @@ import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CancellationException;
@@ -43,11 +45,13 @@ import com.google.common.util.concurrent.ListeningExecutorService;
 import com.google.common.util.concurrent.MoreExecutors;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 
+import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.tez.common.DagContainerLauncher;
 import org.apache.tez.common.ReflectionUtils;
 import org.apache.tez.common.TezUtils;
 import org.apache.tez.dag.records.TezDAGID;
 import org.apache.tez.common.security.JobTokenSecretManager;
+import org.apache.tez.dag.records.TezVertexID;
 import org.apache.tez.runtime.library.common.TezRuntimeUtils;
 import org.apache.tez.runtime.library.common.shuffle.ShuffleUtils;
 import org.apache.tez.serviceplugins.api.ContainerLaunchRequest;
@@ -445,4 +449,9 @@ public class LocalContainerLauncher extends DagContainerLauncher {
     }
   }
 
+  public void vertexComplete(TezVertexID dag, JobTokenSecretManager jobTokenSecretManager, Set<NodeId> nodeIdList) {
+    if (deletionTracker != null) {
+      deletionTracker.vertexComplete(dag, jobTokenSecretManager, nodeIdList);
+    }
+  }
 }
