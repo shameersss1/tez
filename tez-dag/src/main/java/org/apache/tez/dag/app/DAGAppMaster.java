@@ -339,8 +339,6 @@ public class DAGAppMaster extends AbstractService {
   private ResourceCalculatorProcessTree cpuPlugin;
   private GcTimeUpdater gcPlugin;
 
-  private boolean cleanUpFailedTaskAttempt;
-
   // must be LinkedHashMap to preserve order of service addition
   Map<Service, ServiceWithDependency> services =
       new LinkedHashMap<Service, ServiceWithDependency>();
@@ -442,10 +440,6 @@ public class DAGAppMaster extends AbstractService {
 
     this.isLocal = conf.getBoolean(TezConfiguration.TEZ_LOCAL_MODE,
         TezConfiguration.TEZ_LOCAL_MODE_DEFAULT);
-
-    cleanUpFailedTaskAttempt = ShuffleUtils.isTezShuffleHandler(conf)
-        && conf.getBoolean(TezConfiguration.TEZ_AM_TASK_ATTEMPT_CLEANUP_ON_FAILURE,
-        TezConfiguration.TEZ_AM_TASK_ATTEMPT_CLEANUP_ON_FAILURE_DEFAULT);
 
     UserPayload defaultPayload = TezUtils.createUserPayloadFromConf(amConf);
 
@@ -2780,8 +2774,6 @@ public class DAGAppMaster extends AbstractService {
   }
 
   public void taskAttemptFailed(TezTaskAttemptID attemptID, NodeId nodeId) {
-    if (cleanUpFailedTaskAttempt) {
-      getContainerLauncherManager().taskAttemptFailed(attemptID, jobTokenSecretManager, nodeId);
-    }
+    getContainerLauncherManager().taskAttemptFailed(attemptID, jobTokenSecretManager, nodeId);
   }
 }
