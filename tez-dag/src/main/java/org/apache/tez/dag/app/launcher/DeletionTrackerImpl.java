@@ -75,6 +75,26 @@ public class DeletionTrackerImpl extends DeletionTracker {
   }
 
   @Override
+  public void taskAttemptFailed(TezTaskAttemptID taskAttemptID, JobTokenSecretManager jobTokenSecretManager,
+                                NodeId nodeId) {
+    super.taskAttemptFailed(taskAttemptID, jobTokenSecretManager, nodeId);
+    if (nodeIdShufflePortMap == null || nodeIdShufflePortMap.get(nodeId) == null) {
+      LOG.warn("Unable to find the shuffle port for shuffle data deletion of failed task attempt.");
+      return;
+    }
+    int shufflePort = nodeIdShufflePortMap.get(nodeId);
+    if (shufflePort != TezRuntimeUtils.INVALID_PORT) {
+      TaskAttemptFailedRunnable taskAttemptFailedRunnable = new TaskAttemptFailedRunnable(nodeId, shufflePort,
+          taskAttemptID, TezRuntimeUtils.getHttpConnectionParams(conf), jobTokenSecretManager);
+      try {
+        dagCleanupService.submit(taskAttemptFailedRunnable);
+      } catch (RejectedExecutionException rejectedException) {
+        LOG.info("Ignoring failed task attempt deletion request for " + taskAttemptFailedRunnable);
+      }
+    }
+  }
+
+  @Override
   public void addNodeShufflePort(NodeId nodeId, int port) {
     if (port != TezRuntimeUtils.INVALID_PORT) {
       if(nodeIdShufflePortMap.get(nodeId) == null) {
@@ -95,37 +115,5 @@ public class DeletionTrackerImpl extends DeletionTracker {
       dagCleanupService = null;
     }
     nodeIdShufflePortMap = null;
-  }
-
-  @Override
-  public void taskAttemptFailed(TezTaskAttemptID attemptID, JobTokenSecretManager secretManager, NodeId nodeId) {
-    super.taskAttemptFailed(attemptID, secretManager, nodeId);
-    if (nodeIdShufflePortMap == null || nodeIdShufflePortMap.get(nodeId) == null) {
-      LOG.warn("Unable to find the shuffle port for shuffle data deletion of failed task attempt.");
-      return;
-    }
-    BaseHttpConnection httpConnection = null;
-    try {
-      int shufflePort = nodeIdShufflePortMap.get(nodeId);
-      URL baseURL = TezRuntimeUtils.constructBaseURIForShuffleHandlerTaskAttemptFailed(
-          nodeId.getHost(), shufflePort, attemptID.getTaskID().getVertexID().getDAGId().getApplicationId().toString(),
-          attemptID.getTaskID().getVertexID().getDAGId().getId(), attemptID.toString(), false);
-
-      httpConnection = TezRuntimeUtils.getHttpConnection(true, baseURL,
-          TezRuntimeUtils.getHttpConnectionParams(conf), "TaskAttemptFailedDelete", secretManager);
-      httpConnection.connect();
-      httpConnection.getInputStream();
-    } catch (Exception e) {
-      LOG.warn("Could not setup HTTP Connection to the node " + nodeId.getHost() +
-          "for shuffle data deletion of failed task attempt. ", e);
-    } finally {
-      try {
-        if (httpConnection != null) {
-          httpConnection.cleanup(true);
-        }
-      } catch (IOException ioe) {
-        LOG.warn("Encountered IOException for " + nodeId.getHost() + " during close. ", ioe);
-      }
-    }
   }
 }

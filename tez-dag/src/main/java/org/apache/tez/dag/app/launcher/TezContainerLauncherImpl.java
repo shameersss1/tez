@@ -452,10 +452,11 @@ public class TezContainerLauncherImpl extends DagContainerLauncher {
     }
   }
 
-  public void taskAttemptFailed(TezTaskAttemptID attemptID, JobTokenSecretManager jobTokenSecretManager,
+  @Override
+  public void taskAttemptFailed(TezTaskAttemptID taskAttemptID, JobTokenSecretManager jobTokenSecretManager,
                                 NodeId nodeId) {
     if (deletionTracker != null) {
-      deletionTracker.taskAttemptFailed(attemptID, jobTokenSecretManager, nodeId);
+      deletionTracker.taskAttemptFailed(taskAttemptID, jobTokenSecretManager, nodeId);
     }
   }
 }

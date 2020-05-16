@@ -1270,7 +1270,7 @@ public class TestShuffleHandler {
   }
 
   @Test(timeout = 5000)
-  public void testTaskAttemptDelete() throws Exception {
+  public void testFailedTaskAttemptDelete() throws Exception {
     final ArrayList<Throwable> failures = new ArrayList<Throwable>(1);
     Configuration conf = new Configuration();
     conf.setInt(ShuffleHandler.MAX_SHUFFLE_CONNECTIONS, 3);
@@ -1321,7 +1321,7 @@ public class TestShuffleHandler {
               "http://127.0.0.1:"
                   + shuffleHandler.getConfig().get(
                   ShuffleHandler.SHUFFLE_PORT_CONFIG_KEY)
-                  + "/mapOutput?taskAction=delete&job=job_12345_0001&dag=1&taskattempt=" + appAttemptId);
+                  + "/mapOutput?taskAttemptAction=delete&job=job_12345_0001&dag=1&map=" + appAttemptId);
       HttpURLConnection conn = (HttpURLConnection) url.openConnection();
       conn.setRequestProperty(ShuffleHeader.HTTP_HEADER_NAME,
           ShuffleHeader.DEFAULT_HTTP_HEADER_NAME);

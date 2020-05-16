@@ -192,7 +192,7 @@ public class TezRuntimeUtils {
   }
 
   public static URL constructBaseURIForShuffleHandlerTaskAttemptFailed(
-      String host, int port, String appId, int dagIdentifier, String taskIndentifier, boolean sslShuffle)
+      String host, int port, String appId, int dagIdentifier, String taskAttemptIdentifier, boolean sslShuffle)
       throws MalformedURLException {
     String httpProtocol = (sslShuffle) ? "https://" : "http://";
     StringBuilder sb = new StringBuilder(httpProtocol);
@@ -200,13 +200,13 @@ public class TezRuntimeUtils {
     sb.append(":");
     sb.append(port);
     sb.append("/");
-    sb.append("mapOutput?taskAction=delete");
+    sb.append("mapOutput?taskAttemptAction=delete");
     sb.append("&job=");
     sb.append(appId.replace("application", "job"));
     sb.append("&dag=");
     sb.append(String.valueOf(dagIdentifier));
-    sb.append("&taskattempt=");
-    sb.append(String.valueOf(taskIndentifier));
+    sb.append("&map=");
+    sb.append(String.valueOf(taskAttemptIdentifier));
     return new URL(sb.toString());
   }
 

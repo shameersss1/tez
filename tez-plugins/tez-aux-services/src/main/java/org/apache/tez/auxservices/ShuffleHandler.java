@@ -58,6 +58,7 @@ import javax.crypto.SecretKey;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileContext;
+import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.LocalDirAllocator;
 import org.apache.hadoop.fs.Path;
@@ -1003,7 +1004,7 @@ public class ShuffleHandler extends AuxiliaryService {
         new QueryStringDecoder(request.getUri()).getParameters();
       final List<String> keepAliveList = q.get("keepAlive");
       final List<String> dagCompletedQ = q.get("dagAction");
-      final List<String> taskAttemptFailedQ = q.get("taskAction");
+      final List<String> taskAttemptFailedQ = q.get("taskAttemptAction");
       boolean keepAliveParam = false;
       if (keepAliveList != null && keepAliveList.size() == 1) {
         keepAliveParam = Boolean.parseBoolean(keepAliveList.get(0));
@@ -1016,21 +1017,20 @@ public class ShuffleHandler extends AuxiliaryService {
       final Range reduceRange = splitReduces(q.get("reduce"));
       final List<String> jobQ = q.get("job");
       final List<String> dagIdQ = q.get("dag");
-      final List<String> taskAttemptIdQ = q.get("taskattempt");
       if (LOG.isDebugEnabled()) {
         LOG.debug("RECV: " + request.getUri() +
             "\n  mapId: " + mapIds +
             "\n  reduceId: " + reduceRange +
             "\n  jobId: " + jobQ +
             "\n  dagId: " + dagIdQ +
-            "\n  taskAttemptId: " + taskAttemptIdQ +
             "\n  keepAlive: " + keepAliveParam);
       }
       // If the request is for Dag Deletion, process the request and send OK.
       if (deleteDagDirectories(evt, dagCompletedQ, jobQ, dagIdQ))  {
         return;
       }
-      if (deleteTaskAttemptDirectories(evt, taskAttemptFailedQ, jobQ, dagIdQ, taskAttemptIdQ)) {
+      // If the request is for Failed Task Attempt Deletion, process the request and send OK.
+      if (deleteTaskAttemptDirectory(evt, taskAttemptFailedQ, jobQ, dagIdQ, mapIds)) {
         return;
       }
       if (mapIds == null || reduceRange == null || jobQ == null || dagIdQ == null) {
@@ -1132,29 +1132,28 @@ public class ShuffleHandler extends AuxiliaryService {
       return false;
     }
 
-    private boolean deleteTaskAttemptDirectories(MessageEvent evt, List<String> taskAttemptFailedQ,
-                                            List<String> jobQ, List<String> dagIdQ, List<String> taskAttemptIdQ) {
+    private boolean deleteTaskAttemptDirectory(MessageEvent evt, List<String> taskAttemptFailedQ,
+                                               List<String> jobQ, List<String> dagIdQ, List<String> taskAttemptIdQ) {
       if (jobQ == null || jobQ.isEmpty()) {
         return false;
       }
       if (taskAttemptFailedQ != null && !taskAttemptFailedQ.isEmpty() && taskAttemptFailedQ.get(0).contains("delete")
           && taskAttemptIdQ != null && !taskAttemptIdQ.isEmpty()) {
-        String baseStr = getBaseLocation(jobQ.get(0), dagIdQ.get(0), userRsrc.get(jobQ.get(0)));
-        try {
-          FileContext lfc = FileContext.getLocalFSFileContext();
-          for (Path dagPath : lDirAlloc.getAllLocalPathsToRead(baseStr, conf)) {
-            RemoteIterator<FileStatus> status = lfc.listStatus(dagPath);
-            while (status.hasNext()) {
-              FileStatus fileStatus = status.next();
-              Path attemptPath = fileStatus.getPath();
-              if (attemptPath.getName().startsWith(taskAttemptIdQ.get(0))) {
-                boolean retDelete = lfc.delete(attemptPath, true);
-                LOG.info("Deleting directory : " + attemptPath + " returned " + retDelete);
+        for (String taskAttemptId : taskAttemptIdQ) {
+          String baseStr = getBaseLocation(jobQ.get(0), dagIdQ.get(0), userRsrc.get(jobQ.get(0))) +
+              Path.SEPARATOR + taskAttemptId;
+          try {
+            FileSystem fs = FileSystem.getLocal(conf).getRaw();
+            for (Path taskAttemptPath : lDirAlloc.getAllLocalPathsToRead(baseStr, conf)) {
+              if (fs.delete(taskAttemptPath, true)) {
+                LOG.info("Deleted directory : " + taskAttemptPath);
+                // remove entry from IndexCache
+                indexCache.removeMap(taskAttemptId);
               }
             }
+          } catch (IOException e) {
+            LOG.warn("Encountered exception during failed task attempt delete " + e);
           }
-        } catch (IOException e) {
-          LOG.warn("Encountered exception during dag delete "+ e);
         }
         evt.getChannel().write(new DefaultHttpResponse(HTTP_1_1, OK));
         evt.getChannel().close();

@@ -36,7 +36,8 @@ public abstract class DeletionTracker {
     //do nothing
   }
 
-  public void taskAttemptFailed(TezTaskAttemptID attemptID, JobTokenSecretManager secretManager, NodeId nodeId) {
+  public void taskAttemptFailed(TezTaskAttemptID taskAttemptID, JobTokenSecretManager jobTokenSecretManager,
+                                NodeId nodeId) {
     //do nothing
   }
 

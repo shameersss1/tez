@@ -202,9 +202,9 @@ public class ContainerLauncherManager extends AbstractService
     }
   }
 
-  public void taskAttemptFailed(TezTaskAttemptID attemptID, JobTokenSecretManager secretManager, NodeId nodeId) {
+  public void taskAttemptFailed(TezTaskAttemptID taskAttemptID, JobTokenSecretManager secretManager, NodeId nodeId) {
     for (int i = 0; i < containerLaunchers.length; i++) {
-      containerLaunchers[i].taskAttemptFailed(attemptID, secretManager, nodeId);
+      containerLaunchers[i].taskAttemptFailed(taskAttemptID, secretManager, nodeId);
     }
   }
 

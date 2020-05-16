@@ -49,12 +49,10 @@ public class ContainerLauncherWrapper {
     }
   }
 
-  public void taskAttemptFailed(TezTaskAttemptID attemptID, JobTokenSecretManager jobTokenSecretManager,
+  public void taskAttemptFailed(TezTaskAttemptID taskAttemptID, JobTokenSecretManager jobTokenSecretManager,
                                 NodeId nodeId) {
-    if (real instanceof TezContainerLauncherImpl) {
-      ((TezContainerLauncherImpl) real).taskAttemptFailed(attemptID, jobTokenSecretManager, nodeId);
-    } else if (real instanceof LocalContainerLauncher) {
-      ((LocalContainerLauncher) real).taskAttemptFailed(attemptID, jobTokenSecretManager, nodeId);
+    if (real instanceof DagContainerLauncher) {
+      ((DagContainerLauncher) real).taskAttemptFailed(taskAttemptID, jobTokenSecretManager, nodeId);
     }
   }
 }
