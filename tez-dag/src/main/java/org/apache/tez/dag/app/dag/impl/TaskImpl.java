@@ -41,7 +41,6 @@ import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.tez.dag.app.dag.event.TaskEventTAFailed;
 import org.apache.tez.runtime.api.TaskFailureType;
-import org.apache.tez.runtime.library.common.shuffle.ShuffleUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;

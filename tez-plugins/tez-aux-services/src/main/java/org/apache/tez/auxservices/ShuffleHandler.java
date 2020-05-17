@@ -1147,7 +1147,7 @@ public class ShuffleHandler extends AuxiliaryService {
                 Path taskAttemptPath = fileStatus.getPath();
                 if (taskAttemptPath.getName().startsWith(taskAttemptId)) {
                   if (fs.delete(taskAttemptPath, true)) {
-                    LOG.info("Deleted directory : " + fileStatus.getPath());
+                    LOG.info("Deleted directory : " + taskAttemptPath);
                     // remove entry from IndexCache
                     indexCache.removeMap(taskAttemptPath.getName());
                     break;
