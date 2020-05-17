@@ -20,7 +20,6 @@ package org.apache.tez.dag.app.launcher;
 
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.tez.common.security.JobTokenSecretManager;
-import org.apache.tez.dag.records.TezDAGID;
 import org.apache.tez.dag.records.TezTaskAttemptID;
 import org.apache.tez.http.BaseHttpConnection;
 import org.apache.tez.http.HttpConnectionParams;
@@ -33,18 +32,18 @@ import java.net.URL;
 
 class TaskAttemptFailedRunnable implements Runnable {
   private static final Logger LOG = LoggerFactory.getLogger(TaskAttemptFailedRunnable.class);
-  final NodeId nodeId;
-  final TezTaskAttemptID attemptID;
-  final JobTokenSecretManager jobTokenSecretManager;
-  final int shufflePort;
-  final HttpConnectionParams httpConnectionParams;
+  private final NodeId nodeId;
+  private final TezTaskAttemptID taskAttemptID;
+  private final JobTokenSecretManager jobTokenSecretManager;
+  private final int shufflePort;
+  private final HttpConnectionParams httpConnectionParams;
 
-  public TaskAttemptFailedRunnable(NodeId nodeId, int shufflePort, TezTaskAttemptID attemptID,
+  TaskAttemptFailedRunnable(NodeId nodeId, int shufflePort, TezTaskAttemptID taskAttemptID,
                            HttpConnectionParams httpConnectionParams,
                            JobTokenSecretManager jobTokenSecretMgr) {
     this.nodeId = nodeId;
     this.shufflePort = shufflePort;
-    this.attemptID = attemptID;
+    this.taskAttemptID = taskAttemptID;
     this.httpConnectionParams = httpConnectionParams;
     this.jobTokenSecretManager = jobTokenSecretMgr;
   }
@@ -54,8 +53,9 @@ class TaskAttemptFailedRunnable implements Runnable {
     BaseHttpConnection httpConnection = null;
     try {
       URL baseURL = TezRuntimeUtils.constructBaseURIForShuffleHandlerTaskAttemptFailed(
-          nodeId.getHost(), shufflePort, attemptID.getTaskID().getVertexID().getDAGId().getApplicationId().toString(),
-          attemptID.getTaskID().getVertexID().getDAGId().getId(), attemptID.toString(), false);
+          nodeId.getHost(), shufflePort, taskAttemptID.getTaskID().getVertexID().getDAGId().
+              getApplicationId().toString(), taskAttemptID.getTaskID().getVertexID().getDAGId().getId(),
+          taskAttemptID.toString(), false);
       httpConnection = TezRuntimeUtils.getHttpConnection(true, baseURL, httpConnectionParams,
           "FailedTaskAttemptDelete", jobTokenSecretManager);
       httpConnection.connect();
@@ -77,6 +77,6 @@ class TaskAttemptFailedRunnable implements Runnable {
   @Override
   public String toString() {
     return "TaskAttemptFailedRunnable nodeId=" + nodeId + ", shufflePort=" + shufflePort + ", taskAttemptId=" +
-        attemptID.toString();
+        taskAttemptID.toString();
   }
 }

@@ -41,6 +41,7 @@ import org.apache.commons.lang.exception.ExceptionUtils;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.tez.dag.app.dag.event.TaskEventTAFailed;
 import org.apache.tez.runtime.api.TaskFailureType;
+import org.apache.tez.runtime.library.common.shuffle.ShuffleUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -394,7 +395,7 @@ public class TaskImpl implements Task, EventHandler<TaskEvent> {
     this.containerContext = containerContext;
     this.recoveryData = appContext.getDAGRecoveryData() == null ?
         null : appContext.getDAGRecoveryData().getTaskRecoveryData(taskId);
-    this.cleanUpFailedTaskAttempt = org.apache.tez.runtime.library.common.shuffle.ShuffleUtils.isTezShuffleHandler(conf)
+    this.cleanUpFailedTaskAttempt = ShuffleUtils.isTezShuffleHandler(conf)
         && conf.getBoolean(org.apache.tez.dag.api.TezConfiguration.TEZ_AM_TASK_ATTEMPT_CLEANUP_ON_FAILURE,
         org.apache.tez.dag.api.TezConfiguration.TEZ_AM_TASK_ATTEMPT_CLEANUP_ON_FAILURE_DEFAULT);
     stateMachine = new StateMachineTez<TaskStateInternal, TaskEventType, TaskEvent, TaskImpl>(
