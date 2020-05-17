@@ -58,6 +58,7 @@ import javax.crypto.SecretKey;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileContext;
 import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.LocalDirAllocator;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.io.DataInputByteBuffer;
@@ -1138,15 +1139,20 @@ public class ShuffleHandler extends AuxiliaryService {
       if (taskAttemptFailedQ != null && !taskAttemptFailedQ.isEmpty() && taskAttemptFailedQ.get(0).contains("delete")
           && taskAttemptIdQ != null && !taskAttemptIdQ.isEmpty()) {
         for (String taskAttemptId : taskAttemptIdQ) {
-          String baseStr = getBaseLocation(jobQ.get(0), dagIdQ.get(0), userRsrc.get(jobQ.get(0))) +
-              Path.SEPARATOR + taskAttemptId;
+          String baseStr = getBaseLocation(jobQ.get(0), dagIdQ.get(0), userRsrc.get(jobQ.get(0)));
           try {
             FileSystem fs = FileSystem.getLocal(conf).getRaw();
-            for (Path taskAttemptPath : lDirAlloc.getAllLocalPathsToRead(baseStr, conf)) {
-              if (fs.delete(taskAttemptPath, true)) {
-                LOG.info("Deleted directory : " + taskAttemptPath);
-                // remove entry from IndexCache
-                indexCache.removeMap(taskAttemptId);
+            for (Path basePath : lDirAlloc.getAllLocalPathsToRead(baseStr, conf)) {
+              for (FileStatus fileStatus : fs.listStatus(basePath)) {
+                Path taskAttemptPath = fileStatus.getPath();
+                if (taskAttemptPath.getName().startsWith(taskAttemptId)) {
+                  if (fs.delete(taskAttemptPath, true)) {
+                    LOG.info("Deleted directory : " + fileStatus.getPath());
+                    // remove entry from IndexCache
+                    indexCache.removeMap(taskAttemptPath.getName());
+                    break;
+                  }
+                }
               }
             }
           } catch (IOException e) {

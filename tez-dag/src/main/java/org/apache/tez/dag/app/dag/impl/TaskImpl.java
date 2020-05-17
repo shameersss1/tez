@@ -146,8 +146,6 @@ public class TaskImpl implements Task, EventHandler<TaskEvent> {
 
   private final TaskRecoveryData recoveryData;
 
-  private final boolean cleanUpFailedTaskAttempt;
-
   private final List<TezEvent> tezEventsForTaskAttempts = new ArrayList<TezEvent>();
   static final ArrayList<TezEvent> EMPTY_TASK_ATTEMPT_TEZ_EVENTS =
       new ArrayList(0);
@@ -395,9 +393,6 @@ public class TaskImpl implements Task, EventHandler<TaskEvent> {
     this.containerContext = containerContext;
     this.recoveryData = appContext.getDAGRecoveryData() == null ?
         null : appContext.getDAGRecoveryData().getTaskRecoveryData(taskId);
-    this.cleanUpFailedTaskAttempt = ShuffleUtils.isTezShuffleHandler(conf)
-        && conf.getBoolean(org.apache.tez.dag.api.TezConfiguration.TEZ_AM_TASK_ATTEMPT_CLEANUP_ON_FAILURE,
-        org.apache.tez.dag.api.TezConfiguration.TEZ_AM_TASK_ATTEMPT_CLEANUP_ON_FAILURE_DEFAULT);
     stateMachine = new StateMachineTez<TaskStateInternal, TaskEventType, TaskEvent, TaskImpl>(
         stateMachineFactory.make(this), this);
     augmentStateMachine();
@@ -1255,12 +1250,10 @@ public class TaskImpl implements Task, EventHandler<TaskEvent> {
       // The attempt would have informed the scheduler about it's failure
 
       // Delete the intermediate shuffle data for failed task attempt
-      if (task.cleanUpFailedTaskAttempt) {
-        TaskAttempt taskAttempt = task.getAttempt(castEvent.getTaskAttemptID());
-        if (taskAttempt.getAssignedContainer() != null) {
-          NodeId nodeId = taskAttempt.getAssignedContainer().getNodeId();
-          task.appContext.getAppMaster().taskAttemptFailed(taskAttempt.getID(), nodeId);
-        }
+      TaskAttempt taskAttempt = task.getAttempt(castEvent.getTaskAttemptID());
+      if (taskAttempt.getAssignedContainer() != null) {
+        NodeId nodeId = taskAttempt.getAssignedContainer().getNodeId();
+        task.appContext.getAppMaster().taskAttemptFailed(taskAttempt.getID(), nodeId);
       }
 
       task.taskAttemptStatus.put(castEvent.getTaskAttemptID().getId(), true);
